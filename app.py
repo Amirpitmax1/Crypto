@@ -17,7 +17,7 @@ TELEGRAM_CHAT_ID = "6198128738"  # رشته باشد
 
 # تنظیمات ادمین‌ها
 ADMINS = {"admin1"}
-ADMIN_PASSWORD = "AH1388"
+ADMIN_PASSWORD = "123456"
 
 def check_auth(username, password):
     return username == "admin" and password == ADMIN_PASSWORD
