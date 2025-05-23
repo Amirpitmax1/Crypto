@@ -10,29 +10,27 @@ import requests
 
 app = Flask(__name__)
 
-# --- تنظیمات تلگرام ---
+# اطلاعات کلیدی
 TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
-CHANNEL_ID = "-1002548463351"  # آیدی کانال تلگرام (با -100 شروع شود)
-ADMIN_CHAT_ID = "6198128738"  # آیدی چت مدیر برای پاسخ به /start
+CHANNEL_ID = "-1002548463351"
+ADMIN_CHAT_ID = "6198128738"
 
-# ارسال پیام به تلگرام
 def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     try:
         response = requests.post(url, data={"chat_id": chat_id, "text": text})
         if response.status_code != 200:
-            print(f"❌ خطا در ارسال پیام تلگرام: {response.text}")
+            print(f"خطا در ارسال پیام تلگرام: {response.text}")
         return response.status_code == 200
     except Exception as e:
-        print("❌ خطا در ارسال پیام:", e)
+        print("خطا در ارسال پیام:", e)
         return False
 
-# پیش‌بینی حرکت قیمت با 5 اندیکاتور مهم
 def predict_price_movement(data):
     try:
         df = data.copy().dropna().tail(500)
         if len(df) < 100:
-            return "داده کافی نیست برای AI"
+            return "داده کافی نیست"
         df['target'] = df['Close'].shift(-1) > df['Close']
         features = ['RSI', 'MACD', 'EMA_50', 'EMA_200', 'BB_upper']
         for f in features:
@@ -49,42 +47,24 @@ def predict_price_movement(data):
         prob_up = model.predict_proba(latest_features)[0][1]
         return round(prob_up * 100, 2)
     except Exception as e:
-        print("❌ خطا در پیش‌بینی AI:", e)
-        return "خطا در پیش‌بینی AI"
+        print("خطا در پیش‌بینی AI:", e)
+        return "خطا در پیش‌بینی"
 
-# تحلیل داده‌ها با 5 اندیکاتور
 def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
     try:
         data = yf.download(symbol, period=f"{lookback_days}d", interval=interval)
         if data.empty or len(data) < 50:
-            msg = "⚠️ داده کافی نیست."
-            send_telegram_message(CHANNEL_ID, msg)
-            return {"error": msg}
+            return {"error": "داده کافی نیست."}
 
         data['RSI'] = ta.rsi(data['Close'], length=14)
         macd = ta.macd(data['Close'])
-        if macd is None or macd.empty:
-            msg = "⚠️ خطا در محاسبه MACD."
-            send_telegram_message(CHANNEL_ID, msg)
-            return {"error": msg}
-        data['MACD'] = macd['MACD_12_26_9']
+        data['MACD'] = macd['MACD_12_26_9'] if macd is not None else None
         data['EMA_50'] = ta.ema(data['Close'], length=50)
         data['EMA_200'] = ta.ema(data['Close'], length=200)
         bb = ta.bbands(data['Close'], length=20)
-        if bb is None or bb.empty:
-            msg = "⚠️ خطا در محاسبه بولینگر."
-            send_telegram_message(CHANNEL_ID, msg)
-            return {"error": msg}
-        data['BB_upper'] = bb['BBU_20_2.0']
-        data['BB_lower'] = bb['BBL_20_2.0']
+        data['BB_upper'] = bb['BBU_20_2.0'] if bb is not None else None
 
-        data_clean = data.dropna(subset=['RSI', 'MACD', 'EMA_50', 'EMA_200', 'BB_upper', 'BB_lower'])
-        if data_clean.empty:
-            msg = "⚠️ داده کافی پس از حذف مقادیر نال نیست."
-            send_telegram_message(CHANNEL_ID, msg)
-            return {"error": msg}
-
-        latest = data_clean.iloc[-1]
+        latest = data.dropna(subset=['RSI', 'MACD', 'EMA_50', 'EMA_200', 'BB_upper']).iloc[-1]
 
         suggestion = []
         if latest['RSI'] < 30:
@@ -97,12 +77,12 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
         else:
             suggestion.append("EMA کراس: روند نزولی")
 
-        if latest['Close'] < latest['BB_lower']:
-            suggestion.append("قیمت زیر باند پایین بولینگر")
-        elif latest['Close'] > latest['BB_upper']:
+        if latest['Close'] < data['BB_upper'].iloc[-1]:
+            suggestion.append("قیمت زیر باند بالا بولینگر")
+        else:
             suggestion.append("قیمت بالای باند بالا بولینگر")
 
-        ai_prediction = predict_price_movement(data_clean)
+        ai_prediction = predict_price_movement(data)
 
         message = (
             f"📊 تحلیل {symbol} ({interval}):\n"
@@ -113,7 +93,6 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
             f"AI: {ai_prediction}% احتمال رشد\n"
             f"🕓 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
-
         send_telegram_message(CHANNEL_ID, message)
 
         return {
@@ -125,18 +104,15 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
             "EMA_50": round(latest['EMA_50'], 2),
             "EMA_200": round(latest['EMA_200'], 2),
             "BB_upper": round(latest['BB_upper'], 2),
-            "BB_lower": round(latest['BB_lower'], 2),
             "suggestion": suggestion,
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M'),
             "AI_Prediction": f"{ai_prediction}% احتمال رشد در کندل بعدی"
         }
     except Exception as e:
-        error_msg = f"❌ خطا در آنالیز: {e}"
-        print(error_msg)
-        send_telegram_message(CHANNEL_ID, error_msg)
+        print("خطا در آنالیز:", e)
+        send_telegram_message(CHANNEL_ID, "خطا در تحلیل داده‌ها")
         return {"error": "خطا در تحلیل داده‌ها"}
 
-# وب‌هوک تلگرام
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     data = request.get_json()
@@ -153,7 +129,6 @@ def telegram_webhook():
             send_telegram_message(chat_id, "فقط دستور /start پشتیبانی می‌شود.")
     return "ok"
 
-# صفحه وب اصلی
 @app.route('/', methods=['GET'])
 def home():
     symbol = request.args.get("symbol", "BTC-USD")
@@ -162,5 +137,5 @@ def home():
     return jsonify(result)
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 4000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
