@@ -134,9 +134,6 @@ HTML_TEMPLATE = '''
 def home():
     symbol = request.args.get("symbol", "BTC-USD")
     interval = request.args.get("interval", "1h")
-    chat_id = request.args.get("chat_id", "6198128738")
-    if chat_id not in ADMINS:
-        return "<h3>شما اجازه دسترسی ندارید. لطفاً با ادمین تماس بگیرید.</h3>"
     result = analyze(symbol, interval)
     return render_template_string(HTML_TEMPLATE, result=result, symbol=symbol, interval=interval)
 
