@@ -1,13 +1,13 @@
 import os
-from flask import Flask, request
+from flask import Flask
 import yfinance as yf
-import pandas_ta as ta
-from datetime import datetime
+import pandas as pd
+import numpy as np
 import requests
+from datetime import datetime
 
 app = Flask(__name__)
 
-# توکن و آیدی کانال تلگرام
 BOT_TOKEN = "7540066547:AAGRbv2Wpf0-btwV_eB9OsCS0tYXkxEWt6U"
 CHANNEL_ID = "-1002548463351"
 
@@ -15,19 +15,29 @@ def send_to_telegram(text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {"chat_id": CHANNEL_ID, "text": text}
     try:
-        r = requests.post(url, data=data)
-        print("Telegram response:", r.text)
+        requests.post(url, data=data)
     except Exception as e:
-        print("❌ Telegram error:", e)
+        print("Telegram error:", e)
+
+def rsi(series, period=14):
+    delta = series.diff()
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
+    avg_gain = pd.Series(gain).rolling(window=period).mean()
+    avg_loss = pd.Series(loss).rolling(window=period).mean()
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+def ema(series, period=20):
+    return series.ewm(span=period, adjust=False).mean()
 
 def analyze(symbol="BTC-USD", interval="1h"):
     try:
         df = yf.download(symbol, period="5d", interval=interval)
         if df.empty or len(df) < 30:
             return "📉 داده کافی برای تحلیل وجود ندارد."
-
-        df['RSI'] = ta.rsi(df['Close'])
-        df['EMA20'] = ta.ema(df['Close'], length=20)
+        df['RSI'] = rsi(df['Close'])
+        df['EMA20'] = ema(df['Close'])
 
         latest = df.dropna().iloc[-1]
         msg = (
@@ -39,7 +49,7 @@ def analyze(symbol="BTC-USD", interval="1h"):
         )
         return msg
     except Exception as e:
-        print("❌ تحلیل شکست خورد:", e)
+        print("تحلیل شکست خورد:", e)
         return "❌ خطا در تحلیل"
 
 @app.route('/')
