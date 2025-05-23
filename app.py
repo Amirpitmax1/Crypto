@@ -1,4 +1,5 @@
-from flask import Flask, render_template_string, request, redirect, url_for, Response
+import os
+from flask import Flask, render_template_string, request, Response
 from functools import wraps
 import yfinance as yf
 import pandas_ta as ta
@@ -6,13 +7,13 @@ from datetime import datetime
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import requests  # اضافه کردم برای ارسال پیام تلگرام
+import requests
 
 app = Flask(__name__)
 
-# توکن و چت آیدی تلگرام
+# توکن و چت آیدی تلگرام شما
 TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
-TELEGRAM_CHAT_ID = 6198128738
+TELEGRAM_CHAT_ID = "6198128738"  # رشته باشد
 
 ADMINS = {"admin1"}
 ADMIN_PASSWORD = "123456"
@@ -127,7 +128,6 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
     elif latest['Stoch_K'] > 80: suggestion.append("Stochastic: اشباع خرید")
     ai_prediction = predict_price_movement(data)
 
-    # ارسال پیام تلگرام بعد از تحلیل
     message = (
         f"تحلیل {symbol} در تایم‌فریم {interval}:\n"
         f"قیمت: {round(latest['Close'], 2)}\n"
@@ -200,4 +200,5 @@ def admin_panel():
     ''', admins=admins_list, message=message)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host="0.0.0.0", port=port)
