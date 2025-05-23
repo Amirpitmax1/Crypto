@@ -1,5 +1,7 @@
 import os
-from flask import Flask, request, render_template_string
+import json
+import traceback
+from flask import Flask, request, jsonify
 import yfinance as yf
 import pandas_ta as ta
 from datetime import datetime
@@ -10,16 +12,16 @@ import requests
 
 app = Flask(__name__)
 
-# اطلاعات کلیدی
+# توکن و شناسه‌ها
 TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
-CHANNEL_ID = "-1002548463351"  # شناسه عددی کانال تلگرام
-ADMIN_CHAT_ID = "6198128738"  # چت آی‌دی مدیر برای پاسخ به /start
+CHANNEL_ID = "-1002548463351"
+ADMIN_CHAT_ID = "6198128738"
 
-# تابع ارسال پیام به تلگرام
 def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     try:
-        response = requests.post(url, data={"chat_id": chat_id, "text": text})
+        response = requests.post(url, json=payload)
         if response.status_code != 200:
             print(f"❌ خطا در ارسال پیام تلگرام: {response.text}")
         return response.status_code == 200
@@ -27,7 +29,6 @@ def send_telegram_message(chat_id, text):
         print("❌ خطا در ارسال پیام:", e)
         return False
 
-# تابع پیش‌بینی هوش مصنوعی
 def predict_price_movement(data):
     try:
         df = data.copy().dropna().tail(500)
@@ -50,9 +51,8 @@ def predict_price_movement(data):
         return round(prob_up * 100, 2)
     except Exception as e:
         print("❌ خطا در پیش‌بینی AI:", e)
+        traceback.print_exc()
         return "خطا در پیش‌بینی"
-
-# تابع تحلیل کلی داده
 
 def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
     try:
@@ -125,14 +125,14 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
         }
     except Exception as e:
         print("❌ خطا در آنالیز:", e)
+        traceback.print_exc()
         return {"error": "خطا در تحلیل داده‌ها"}
 
-# وب‌هوک برای تلگرام
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
-    data = request.get_json()
+    data = request.get_json(force=True)
     if not data:
-        return "nok", 400
+        return jsonify({"error": "داده ارسال نشده"}), 400
     if "message" in data:
         msg = data["message"]
         chat_id = str(msg["chat"]["id"])
@@ -140,19 +140,19 @@ def telegram_webhook():
         if text == "/start":
             reply = "سلام! ربات تحلیل فعال است. برای مشاهده تحلیل به وب‌سایت مراجعه کنید."
             send_telegram_message(chat_id, reply)
+            return jsonify({"status": "done"})
         else:
             send_telegram_message(chat_id, "فقط دستور /start پشتیبانی می‌شود.")
-    return "ok"
+            return jsonify({"status": "ignored"})
+    return jsonify({"status": "no_message"})
 
-# صفحه وب اصلی
 @app.route('/', methods=['GET'])
 def home():
     symbol = request.args.get("symbol", "BTC-USD")
     interval = request.args.get("interval", "1h")
     result = analyze(symbol, interval)
-    return result
+    return jsonify(result)
 
-# اجرا
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
