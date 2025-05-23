@@ -11,7 +11,7 @@ import requests
 app = Flask(__name__)
 
 # اطلاعات تلگرام (می‌توانید با اطلاعات خودتان جایگزین کنید)
-TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
+TELEGRAM_BOT_TOKEN = "7540066547:AAGRbv2Wpf0-btwV_eB9OsCS0tYXkxEWt6U"
 CHANNEL_ID = "-1002548463351"
 
 # ارسال پیام به تلگرام
