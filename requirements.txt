@@ -1,4 +1,8 @@
+
 Flask
 yfinance
 pandas_ta
 scikit-learn
+requests
+pandas
+numpy
