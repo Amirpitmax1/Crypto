@@ -10,20 +10,24 @@ import requests
 
 app = Flask(__name__)
 
+# اطلاعات کلیدی
 TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
-ADMIN_CHAT_ID = "6198128738"
+CHANNEL_ID = "-1002548463351"  # شناسه عددی کانال تلگرام
+ADMIN_CHAT_ID = "6198128738"  # چت آی‌دی مدیر برای پاسخ به /start
 
+# تابع ارسال پیام به تلگرام
 def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     try:
         response = requests.post(url, data={"chat_id": chat_id, "text": text})
         if response.status_code != 200:
-            print(f"خطا در ارسال پیام تلگرام: {response.text}")
+            print(f"❌ خطا در ارسال پیام تلگرام: {response.text}")
         return response.status_code == 200
     except Exception as e:
-        print("خطا در ارسال پیام:", e)
+        print("❌ خطا در ارسال پیام:", e)
         return False
 
+# تابع پیش‌بینی هوش مصنوعی
 def predict_price_movement(data):
     try:
         df = data.copy().dropna().tail(500)
@@ -31,12 +35,9 @@ def predict_price_movement(data):
             return "داده کافی نیست"
         df['target'] = df['Close'].shift(-1) > df['Close']
         features = ['RSI', 'MACD', 'EMA_50', 'EMA_200', 'BB_upper', 'BB_lower', 'Stoch_K']
-
-        # چک وجود همه ستون‌ها
         for f in features:
             if f not in df.columns:
-                return "ستون {} موجود نیست".format(f)
-
+                return f"ستون {f} موجود نیست"
         X = df[features]
         y = df['target'].astype(int)
         scaler = StandardScaler()
@@ -48,8 +49,10 @@ def predict_price_movement(data):
         prob_up = model.predict_proba(latest_features)[0][1]
         return round(prob_up * 100, 2)
     except Exception as e:
-        print("خطا در پیش‌بینی AI:", e)
+        print("❌ خطا در پیش‌بینی AI:", e)
         return "خطا در پیش‌بینی"
+
+# تابع تحلیل کلی داده
 
 def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
     try:
@@ -57,28 +60,18 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
         if data.empty or len(data) < 50:
             return {"error": "داده کافی نیست."}
 
-        # محاسبه اندیکاتورها با چک خطا
         data['RSI'] = ta.rsi(data['Close'], length=14)
-        macd_df = ta.macd(data['Close'])
-        if macd_df is None or 'MACD_12_26_9' not in macd_df.columns:
-            return {"error": "خطا در محاسبه MACD"}
-        data['MACD'] = macd_df['MACD_12_26_9']
-
+        macd = ta.macd(data['Close'])
+        data['MACD'] = macd['MACD_12_26_9'] if macd is not None else None
         data['EMA_50'] = ta.ema(data['Close'], length=50)
         data['EMA_200'] = ta.ema(data['Close'], length=200)
-
         bb = ta.bbands(data['Close'], length=20)
-        if bb is None or 'BBU_20_2.0' not in bb.columns or 'BBL_20_2.0' not in bb.columns:
-            return {"error": "خطا در محاسبه باند بولینگر"}
-        data['BB_upper'] = bb['BBU_20_2.0']
-        data['BB_lower'] = bb['BBL_20_2.0']
-
+        data['BB_upper'] = bb['BBU_20_2.0'] if bb is not None else None
+        data['BB_lower'] = bb['BBL_20_2.0'] if bb is not None else None
         stoch = ta.stoch(data['High'], data['Low'], data['Close'])
-        if stoch is None or 'STOCHk_14_3_3' not in stoch.columns:
-            return {"error": "خطا در محاسبه Stochastic"}
-        data['Stoch_K'] = stoch['STOCHk_14_3_3']
+        data['Stoch_K'] = stoch['STOCHk_14_3_3'] if stoch is not None else None
 
-        latest = data.iloc[-1]
+        latest = data.dropna().iloc[-1]
 
         suggestion = []
         if latest['RSI'] < 30:
@@ -104,16 +97,16 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
         ai_prediction = predict_price_movement(data)
 
         message = (
-            f"تحلیل {symbol} در تایم‌فریم {interval}:\n"
-            f"قیمت: {round(latest['Close'], 2)}\n"
+            f"📊 تحلیل {symbol} ({interval}):\n"
+            f"💰 قیمت: {round(latest['Close'], 2)}\n"
             f"RSI: {round(latest['RSI'], 2)}\n"
             f"MACD: {round(latest['MACD'], 2)}\n"
-            f"EMA 50: {round(latest['EMA_50'], 2)}\n"
-            f"EMA 200: {round(latest['EMA_200'], 2)}\n"
-            f"پیش‌بینی رشد: {ai_prediction}%\n"
-            f"زمان: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            f"EMA50: {round(latest['EMA_50'], 2)} | EMA200: {round(latest['EMA_200'], 2)}\n"
+            f"AI: {ai_prediction}% احتمال رشد\n"
+            f"🕓 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
-        send_telegram_message(ADMIN_CHAT_ID, message)
+
+        send_telegram_message(CHANNEL_ID, message)
 
         return {
             "symbol": symbol,
@@ -131,54 +124,10 @@ def analyze(symbol="BTC-USD", interval="1h", lookback_days=30):
             "AI_Prediction": f"{ai_prediction}% احتمال رشد در کندل بعدی"
         }
     except Exception as e:
-        print("خطا در آنالیز داده‌ها:", e)
-        return {"error": "خطا در آنالیز داده‌ها"}
+        print("❌ خطا در آنالیز:", e)
+        return {"error": "خطا در تحلیل داده‌ها"}
 
-HTML_TEMPLATE = '''
-<!doctype html>
-<html><head><meta charset="UTF-8"><title>تحلیل تکنیکال</title></head>
-<body style="font-family:Tahoma; direction:rtl; padding:20px">
-  <h2>تحلیل بازار</h2>
-  <form method="get">
-    نماد: <input name="symbol" value="{{symbol}}" required>
-    تایم‌فریم: 
-    <select name="interval">
-      <option value="1m" {% if interval=="1m" %}selected{% endif %}>1 دقیقه</option>
-      <option value="5m" {% if interval=="5m" %}selected{% endif %}>5 دقیقه</option>
-      <option value="15m" {% if interval=="15m" %}selected{% endif %}>15 دقیقه</option>
-      <option value="1h" {% if interval=="1h" %}selected{% endif %}>1 ساعت</option>
-      <option value="4h" {% if interval=="4h" %}selected{% endif %}>4 ساعت</option>
-      <option value="1d" {% if interval=="1d" %}selected{% endif %}>1 روز</option>
-    </select>
-    <button type="submit">تحلیل کن</button>
-  </form>
-  {% if result and not result.error %}
-    <h3>{{result.symbol}} - {{result.interval}} - قیمت: {{result.price}}</h3>
-    <ul>
-      <li>RSI: {{result.RSI}}</li>
-      <li>MACD: {{result.MACD}}</li>
-      <li>EMA 50: {{result.EMA_50}}</li>
-      <li>EMA 200: {{result.EMA_200}}</li>
-      <li>باند بولینگر: {{result.BB_lower}} - {{result.BB_upper}}</li>
-      <li>Stochastic K: {{result.Stoch_K}}</li>
-      <li><b>پیش‌بینی AI:</b> {{result.AI_Prediction}}</li>
-    </ul>
-    <b>پیشنهاد:</b>
-    <ul>{% for s in result.suggestion %}<li>{{s}}</li>{% endfor %}</ul>
-    <small>زمان: {{result.timestamp}}</small>
-  {% elif result.error %}
-    <p style="color:red">خطا: {{result.error}}</p>
-  {% endif %}
-</body></html>
-'''
-
-@app.route('/', methods=['GET'])
-def home():
-    symbol = request.args.get("symbol", "BTC-USD")
-    interval = request.args.get("interval", "1h")
-    result = analyze(symbol, interval)
-    return render_template_string(HTML_TEMPLATE, result=result, symbol=symbol, interval=interval)
-
+# وب‌هوک برای تلگرام
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     data = request.get_json()
@@ -195,6 +144,15 @@ def telegram_webhook():
             send_telegram_message(chat_id, "فقط دستور /start پشتیبانی می‌شود.")
     return "ok"
 
+# صفحه وب اصلی
+@app.route('/', methods=['GET'])
+def home():
+    symbol = request.args.get("symbol", "BTC-USD")
+    interval = request.args.get("interval", "1h")
+    result = analyze(symbol, interval)
+    return result
+
+# اجرا
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
