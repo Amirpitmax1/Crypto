@@ -15,8 +15,9 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = "7436090932:AAETY1oQqTvcK4yd9NJmcH0irPeXbIp_d1M"
 TELEGRAM_CHAT_ID = "6198128738"  # رشته باشد
 
+# تنظیمات ادمین‌ها
 ADMINS = {"admin1"}
-ADMIN_PASSWORD = "123456"
+ADMIN_PASSWORD = "AH1388"
 
 def check_auth(username, password):
     return username == "admin" and password == ADMIN_PASSWORD
