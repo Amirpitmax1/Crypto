@@ -1,4 +1,6 @@
 flask
 yfinance
-pandas-ta
+pandas
+numpy
 requests
+
